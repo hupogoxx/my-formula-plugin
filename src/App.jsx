@@ -6,8 +6,8 @@ export default function App() {
   const [selectedFieldIds, setSelectedFieldIds] = useState([]);
   const [template, setTemplate] = useState('');
   const [placeholder, setPlaceholder] = useState('{N}');
-  const [mode, setMode] = useState('extract'); // 默认改为智能提取模式：extract 或 calc
-  const [calcExpr, setCalcExpr] = useState('x'); // 默认直接用提取出的数字，也可以写 x * 2 等
+  const [mode, setMode] = useState('extract'); // 默认智能提取模式：extract 或 calc
+  const [calcExpr, setCalcExpr] = useState('x'); // 默认直接使用提取出的数字
   const [loading, setLoading] = useState(false);
   const [log, setLog] = useState('');
 
@@ -64,7 +64,7 @@ export default function App() {
 
         const fieldName = fieldMeta.name.trim();
 
-        // 🔍 核心黑科技：从字段名称中提取数字（例如从 "活动1销量" 中提取出数字 1）
+        // 🔍 智能正则：从字段名称中提取数字（例如从 "活动1销量" 中提取出数字 1）
         const numMatch = fieldName.match(/\d+/);
         if (!numMatch) {
           setLog(prev => prev + `⚠️ 列【${fieldName}】名称中未找到任何数字，无法解析 {N}，跳过。\n`);
@@ -74,7 +74,7 @@ export default function App() {
         const rawNum = parseFloat(numMatch[0]);
         let finalN = rawNum;
 
-        // 如果设置了计算表达式（例如输入 x - 1 或者 x * 10）
+        // 如果设置了计算表达式（例如输入 x - 1 或者 x * 2）
         if (mode === 'calc' && calcExpr.trim()) {
           try {
             const calcFunc = new Function('x', `return ${calcExpr};`);
