@@ -6,10 +6,14 @@ export default function App() {
   const [selectedFieldIds, setSelectedFieldIds] = useState([]);
   const [template, setTemplate] = useState('');
   const [placeholder, setPlaceholder] = useState('{N}');
-  const [mode, setMode] = useState('extract'); // 默认智能提取模式：extract 或 calc
-  const [calcExpr, setCalcExpr] = useState('x'); // 默认直接使用提取出的数字
+  const [mode, setMode] = useState('extract'); // 智能提取模式：extract 或 calc
+  const [calcExpr, setCalcExpr] = useState('x'); // 计算表达式
   const [loading, setLoading] = useState(false);
   const [log, setLog] = useState('');
+
+  // 🔍 新增：搜索过滤相关的状态
+  const [searchText, setSearchText] = useState('');
+  const [matchType, setMatchType] = useState('fuzzy'); // fuzzy: 模糊匹配, exact: 精确匹配
 
   // 初始化获取所有公式字段
   useEffect(() => {
@@ -29,11 +33,30 @@ export default function App() {
     loadFields();
   }, []);
 
-  const handleSelectAll = (e) => {
-    if (e.target.checked) {
-      setSelectedFieldIds(fields.map(f => f.id));
+  // 🔍 根据搜索词和匹配模式过滤后的字段列表
+  const filteredFields = fields.filter(f => {
+    const keyword = searchText.trim();
+    if (!keyword) return true; // 如果没输入搜索词，显示全部
+
+    if (matchType === 'exact') {
+      // 精确匹配（列名必须和输入完全一致）
+      return f.name === keyword;
     } else {
-      setSelectedFieldIds([]);
+      // 模糊匹配（列名中包含输入的内容，不区分大小写）
+      return f.name.toLowerCase().includes(keyword.toLowerCase());
+    }
+  });
+
+  // 全选 / 取消全选（针对当前筛选出来的可见字段进行全选操作）
+  const handleSelectAllFiltered = (e) => {
+    const filteredIds = filteredFields.map(f => f.id);
+    if (e.target.checked) {
+      // 将当前筛选出的字段合并进已选列表（避免漏掉之前勾选的）
+      const newSelected = Array.from(new Set([...selectedFieldIds, ...filteredIds]));
+      setSelectedFieldIds(newSelected);
+    } else {
+      // 移除当前筛选出来的字段
+      setSelectedFieldIds(selectedFieldIds.filter(id => !filteredIds.includes(id)));
     }
   };
 
@@ -92,7 +115,6 @@ export default function App() {
         newFormula = newFormula.replace(/“/g, '"').replace(/”/g, '"').replace(/’/g, "'").replace(/‘/g, "'");
 
         try {
-          // 获取公式字段并调用飞书官方 setFormula 写入
           const formulaField = await table.getField(fieldId);
           await formulaField.setFormula(newFormula);
 
@@ -111,32 +133,64 @@ export default function App() {
     }
   };
 
+  // 检查当前筛选出的所有项是否全部被勾选
+  const isAllFilteredSelected = filteredFields.length > 0 && filteredFields.every(f => selectedFieldIds.includes(f.id));
+
   return (
     <div style={{ padding: '14px', fontFamily: 'sans-serif', fontSize: '13px', color: '#333' }}>
       <h3 style={{ margin: '0 0 10px 0', paddingBottom: '6px', borderBottom: '1px solid #eee' }}>⚡ 中文列名公式批量生成器</h3>
 
-      {/* 1. 选择要操作的公式列 */}
+      {/* 1. 选择并搜索公式列 */}
       <div style={{ marginBottom: '10px', background: '#f8f9fa', padding: '8px', borderRadius: '6px' }}>
         <strong>1. 选择要更新的公式列：</strong>
-        <div style={{ marginTop: '4px' }}>
-          <label style={{ cursor: 'pointer', fontWeight: 'bold' }}>
+        
+        {/* 🔍 搜索输入框与模式切换 */}
+        <div style={{ marginTop: '6px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <input
+            type="text"
+            placeholder="输入关键字搜索列名..."
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            style={{ flex: 1, padding: '4px 6px', fontSize: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          />
+          <select
+            value={matchType}
+            onChange={e => setMatchType(e.target.value)}
+            style={{ padding: '4px', fontSize: '12px', border: '1px solid #ddd', borderRadius: '4px', background: '#fff' }}
+          >
+            <option value="fuzzy">模糊匹配</option>
+            <option value="exact">精确匹配</option>
+          </select>
+        </div>
+
+        <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <label style={{ cursor: 'pointer', fontWeight: 'bold', fontSize: '12px' }}>
             <input
               type="checkbox"
-              checked={fields.length > 0 && selectedFieldIds.length === fields.length}
-              onChange={handleSelectAll}
-            /> 全选 ({fields.length})
+              checked={isAllFilteredSelected}
+              onChange={handleSelectAllFiltered}
+            /> 全选当前筛选结果 ({filteredFields.length}/{fields.length})
           </label>
+          <span style={{ color: '#666', fontSize: '11px' }}>已选: {selectedFieldIds.length} 列</span>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px', marginTop: '6px', maxHeight: '100px', overflowY: 'auto' }}>
-          {fields.map(f => (
-            <label key={f.id} style={{ fontSize: '12px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={selectedFieldIds.includes(f.id)}
-                onChange={() => handleFieldToggle(f.id)}
-              /> {f.name}
-            </label>
-          ))}
+
+        {/* 字段复选框网格 */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px', marginTop: '6px', maxHeight: '100px', overflowY: 'auto', background: '#fff', padding: '4px', border: '1px solid #eee', borderRadius: '4px' }}>
+          {filteredFields.length > 0 ? (
+            filteredFields.map(f => (
+              <label key={f.id} style={{ fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.name}>
+                <input
+                  type="checkbox"
+                  checked={selectedFieldIds.includes(f.id)}
+                  onChange={() => handleFieldToggle(f.id)}
+                /> {f.name}
+              </label>
+            ))
+          ) : (
+            <div style={{ gridColumn: 'span 2', textAlign: 'center', color: '#999', fontSize: '11px', padding: '6px' }}>
+              没有找到匹配的字段
+            </div>
+          )}
         </div>
       </div>
 
@@ -189,7 +243,7 @@ export default function App() {
       <div style={{ marginBottom: '10px', background: '#f8f9fa', padding: '8px', borderRadius: '6px' }}>
         <strong>3. 粘贴带有 {placeholder} 的公式模板：</strong>
         <textarea
-          rows={6}
+          rows={5}
           value={template}
           onChange={e => setTemplate(e.target.value)}
           placeholder={`例如模板：\nSWITCH({N}, 1, [销量A], 2, [销量B])`}
